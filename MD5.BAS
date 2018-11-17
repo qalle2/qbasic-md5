@@ -1,8 +1,19 @@
+DECLARE FUNCTION rol21& (n AS LONG)
+DECLARE FUNCTION rol15& (n AS LONG)
+DECLARE FUNCTION rol10& (n AS LONG)
+DECLARE FUNCTION rol6& (n AS LONG)
+DECLARE FUNCTION rol23& (n AS LONG)
+DECLARE FUNCTION rol16& (n AS LONG)
+DECLARE FUNCTION rol11& (n AS LONG)
+DECLARE FUNCTION rol4& (n AS LONG)
+DECLARE FUNCTION rol20& (n AS LONG)
+DECLARE FUNCTION rol14& (n AS LONG)
+DECLARE FUNCTION rol9& (n AS LONG)
+DECLARE FUNCTION rol5& (n AS LONG)
 DECLARE FUNCTION rol22& (n AS LONG)
 DECLARE FUNCTION rol17& (n AS LONG)
 DECLARE FUNCTION rol12& (n AS LONG)
 DECLARE FUNCTION rol7& (n AS LONG)
-DECLARE FUNCTION rol& (n AS LONG, b AS INTEGER)
 DECLARE FUNCTION add& (a AS LONG, b AS LONG)
 DECLARE FUNCTION preparemessage$ (msg AS STRING)
 DECLARE FUNCTION longtohex$ (n AS LONG)
@@ -10,6 +21,8 @@ DECLARE FUNCTION add4& (a AS LONG, b AS LONG, c AS LONG, d AS LONG)
 DECLARE FUNCTION hashchunk$ (state AS STRING, chunkstr AS STRING)
 DECLARE SUB tests ()
 DECLARE FUNCTION md5$ (msg AS STRING)
+
+' Note: the functions rolX rotate a 32-bit unsigned integer left X bits.
 
 ' powers of two (2^0 ... 2^31) in hexadecimal
 DATA 00000001,00000002,00000004,00000008,00000010,00000020,00000040,00000080
@@ -131,109 +144,107 @@ a = d: d = c: c = b: b = add(b, rol17(t))
 t = add4(b AND c OR d AND NOT b, chunk(15), &H49B40821, a)
 a = d: d = c: c = b: b = add(b, rol22(t))
 
-' TODO: optimize the rest of the rotations: rol5(t) instead of rol(t, 5) etc.
-
 ' rounds 16-31
 t = add4(d AND b OR c AND NOT d, chunk(1), &HF61E2562, a)
-a = d: d = c: c = b: b = add(b, rol(t, 5))
+a = d: d = c: c = b: b = add(b, rol5(t))
 t = add4(d AND b OR c AND NOT d, chunk(6), &HC040B340, a)
-a = d: d = c: c = b: b = add(b, rol(t, 9))
+a = d: d = c: c = b: b = add(b, rol9(t))
 t = add4(d AND b OR c AND NOT d, chunk(11), &H265E5A51, a)
-a = d: d = c: c = b: b = add(b, rol(t, 14))
+a = d: d = c: c = b: b = add(b, rol14(t))
 t = add4(d AND b OR c AND NOT d, chunk(0), &HE9B6C7AA, a)
-a = d: d = c: c = b: b = add(b, rol(t, 20))
+a = d: d = c: c = b: b = add(b, rol20(t))
 t = add4(d AND b OR c AND NOT d, chunk(5), &HD62F105D, a)
-a = d: d = c: c = b: b = add(b, rol(t, 5))
+a = d: d = c: c = b: b = add(b, rol5(t))
 t = add4(d AND b OR c AND NOT d, chunk(10), &H2441453, a)
-a = d: d = c: c = b: b = add(b, rol(t, 9))
+a = d: d = c: c = b: b = add(b, rol9(t))
 t = add4(d AND b OR c AND NOT d, chunk(15), &HD8A1E681, a)
-a = d: d = c: c = b: b = add(b, rol(t, 14))
+a = d: d = c: c = b: b = add(b, rol14(t))
 t = add4(d AND b OR c AND NOT d, chunk(4), &HE7D3FBC8, a)
-a = d: d = c: c = b: b = add(b, rol(t, 20))
+a = d: d = c: c = b: b = add(b, rol20(t))
 t = add4(d AND b OR c AND NOT d, chunk(9), &H21E1CDE6, a)
-a = d: d = c: c = b: b = add(b, rol(t, 5))
+a = d: d = c: c = b: b = add(b, rol5(t))
 t = add4(d AND b OR c AND NOT d, chunk(14), &HC33707D6, a)
-a = d: d = c: c = b: b = add(b, rol(t, 9))
+a = d: d = c: c = b: b = add(b, rol9(t))
 t = add4(d AND b OR c AND NOT d, chunk(3), &HF4D50D87, a)
-a = d: d = c: c = b: b = add(b, rol(t, 14))
+a = d: d = c: c = b: b = add(b, rol14(t))
 t = add4(d AND b OR c AND NOT d, chunk(8), &H455A14ED, a)
-a = d: d = c: c = b: b = add(b, rol(t, 20))
+a = d: d = c: c = b: b = add(b, rol20(t))
 t = add4(d AND b OR c AND NOT d, chunk(13), &HA9E3E905, a)
-a = d: d = c: c = b: b = add(b, rol(t, 5))
+a = d: d = c: c = b: b = add(b, rol5(t))
 t = add4(d AND b OR c AND NOT d, chunk(2), &HFCEFA3F8, a)
-a = d: d = c: c = b: b = add(b, rol(t, 9))
+a = d: d = c: c = b: b = add(b, rol9(t))
 t = add4(d AND b OR c AND NOT d, chunk(7), &H676F02D9, a)
-a = d: d = c: c = b: b = add(b, rol(t, 14))
+a = d: d = c: c = b: b = add(b, rol14(t))
 t = add4(d AND b OR c AND NOT d, chunk(12), &H8D2A4C8A, a)
-a = d: d = c: c = b: b = add(b, rol(t, 20))
+a = d: d = c: c = b: b = add(b, rol20(t))
 
 ' rounds 32-47
 t = add4(b XOR c XOR d, chunk(5), &HFFFA3942, a)
-a = d: d = c: c = b: b = add(b, rol(t, 4))
+a = d: d = c: c = b: b = add(b, rol4(t))
 t = add4(b XOR c XOR d, chunk(8), &H8771F681, a)
-a = d: d = c: c = b: b = add(b, rol(t, 11))
+a = d: d = c: c = b: b = add(b, rol11(t))
 t = add4(b XOR c XOR d, chunk(11), &H6D9D6122, a)
-a = d: d = c: c = b: b = add(b, rol(t, 16))
+a = d: d = c: c = b: b = add(b, rol16(t))
 t = add4(b XOR c XOR d, chunk(14), &HFDE5380C, a)
-a = d: d = c: c = b: b = add(b, rol(t, 23))
+a = d: d = c: c = b: b = add(b, rol23(t))
 t = add4(b XOR c XOR d, chunk(1), &HA4BEEA44, a)
-a = d: d = c: c = b: b = add(b, rol(t, 4))
+a = d: d = c: c = b: b = add(b, rol4(t))
 t = add4(b XOR c XOR d, chunk(4), &H4BDECFA9, a)
-a = d: d = c: c = b: b = add(b, rol(t, 11))
+a = d: d = c: c = b: b = add(b, rol11(t))
 t = add4(b XOR c XOR d, chunk(7), &HF6BB4B60, a)
-a = d: d = c: c = b: b = add(b, rol(t, 16))
+a = d: d = c: c = b: b = add(b, rol16(t))
 t = add4(b XOR c XOR d, chunk(10), &HBEBFBC70, a)
-a = d: d = c: c = b: b = add(b, rol(t, 23))
+a = d: d = c: c = b: b = add(b, rol23(t))
 t = add4(b XOR c XOR d, chunk(13), &H289B7EC6, a)
-a = d: d = c: c = b: b = add(b, rol(t, 4))
+a = d: d = c: c = b: b = add(b, rol4(t))
 t = add4(b XOR c XOR d, chunk(0), &HEAA127FA, a)
-a = d: d = c: c = b: b = add(b, rol(t, 11))
+a = d: d = c: c = b: b = add(b, rol11(t))
 t = add4(b XOR c XOR d, chunk(3), &HD4EF3085, a)
-a = d: d = c: c = b: b = add(b, rol(t, 16))
+a = d: d = c: c = b: b = add(b, rol16(t))
 t = add4(b XOR c XOR d, chunk(6), &H4881D05, a)
-a = d: d = c: c = b: b = add(b, rol(t, 23))
+a = d: d = c: c = b: b = add(b, rol23(t))
 t = add4(b XOR c XOR d, chunk(9), &HD9D4D039, a)
-a = d: d = c: c = b: b = add(b, rol(t, 4))
+a = d: d = c: c = b: b = add(b, rol4(t))
 t = add4(b XOR c XOR d, chunk(12), &HE6DB99E5, a)
-a = d: d = c: c = b: b = add(b, rol(t, 11))
+a = d: d = c: c = b: b = add(b, rol11(t))
 t = add4(b XOR c XOR d, chunk(15), &H1FA27CF8, a)
-a = d: d = c: c = b: b = add(b, rol(t, 16))
+a = d: d = c: c = b: b = add(b, rol16(t))
 t = add4(b XOR c XOR d, chunk(2), &HC4AC5665, a)
-a = d: d = c: c = b: b = add(b, rol(t, 23))
+a = d: d = c: c = b: b = add(b, rol23(t))
 
 ' rounds 48-63
 t = add4(c XOR (b OR NOT d), chunk(0), &HF4292244, a)
-a = d: d = c: c = b: b = add(b, rol(t, 6))
+a = d: d = c: c = b: b = add(b, rol6(t))
 t = add4(c XOR (b OR NOT d), chunk(7), &H432AFF97, a)
-a = d: d = c: c = b: b = add(b, rol(t, 10))
+a = d: d = c: c = b: b = add(b, rol10(t))
 t = add4(c XOR (b OR NOT d), chunk(14), &HAB9423A7, a)
-a = d: d = c: c = b: b = add(b, rol(t, 15))
+a = d: d = c: c = b: b = add(b, rol15(t))
 t = add4(c XOR (b OR NOT d), chunk(5), &HFC93A039, a)
-a = d: d = c: c = b: b = add(b, rol(t, 21))
+a = d: d = c: c = b: b = add(b, rol21(t))
 t = add4(c XOR (b OR NOT d), chunk(12), &H655B59C3, a)
-a = d: d = c: c = b: b = add(b, rol(t, 6))
+a = d: d = c: c = b: b = add(b, rol6(t))
 t = add4(c XOR (b OR NOT d), chunk(3), &H8F0CCC92, a)
-a = d: d = c: c = b: b = add(b, rol(t, 10))
+a = d: d = c: c = b: b = add(b, rol10(t))
 t = add4(c XOR (b OR NOT d), chunk(10), &HFFEFF47D, a)
-a = d: d = c: c = b: b = add(b, rol(t, 15))
+a = d: d = c: c = b: b = add(b, rol15(t))
 t = add4(c XOR (b OR NOT d), chunk(1), &H85845DD1, a)
-a = d: d = c: c = b: b = add(b, rol(t, 21))
+a = d: d = c: c = b: b = add(b, rol21(t))
 t = add4(c XOR (b OR NOT d), chunk(8), &H6FA87E4F, a)
-a = d: d = c: c = b: b = add(b, rol(t, 6))
+a = d: d = c: c = b: b = add(b, rol6(t))
 t = add4(c XOR (b OR NOT d), chunk(15), &HFE2CE6E0, a)
-a = d: d = c: c = b: b = add(b, rol(t, 10))
+a = d: d = c: c = b: b = add(b, rol10(t))
 t = add4(c XOR (b OR NOT d), chunk(6), &HA3014314, a)
-a = d: d = c: c = b: b = add(b, rol(t, 15))
+a = d: d = c: c = b: b = add(b, rol15(t))
 t = add4(c XOR (b OR NOT d), chunk(13), &H4E0811A1, a)
-a = d: d = c: c = b: b = add(b, rol(t, 21))
+a = d: d = c: c = b: b = add(b, rol21(t))
 t = add4(c XOR (b OR NOT d), chunk(4), &HF7537E82, a)
-a = d: d = c: c = b: b = add(b, rol(t, 6))
+a = d: d = c: c = b: b = add(b, rol6(t))
 t = add4(c XOR (b OR NOT d), chunk(11), &HBD3AF235, a)
-a = d: d = c: c = b: b = add(b, rol(t, 10))
+a = d: d = c: c = b: b = add(b, rol10(t))
 t = add4(c XOR (b OR NOT d), chunk(2), &H2AD7D2BB, a)
-a = d: d = c: c = b: b = add(b, rol(t, 15))
+a = d: d = c: c = b: b = add(b, rol15(t))
 t = add4(c XOR (b OR NOT d), chunk(9), &HEB86D391, a)
-a = d: d = c: c = b: b = add(b, rol(t, 21))
+a = d: d = c: c = b: b = add(b, rol21(t))
 
 ' return the hash as a string
 hashchunk$ = MKL$(a) + MKL$(b) + MKL$(c) + MKL$(d)
@@ -315,26 +326,31 @@ preparemessage$ = msg + MKL$(origlen% * 8) + STRING$(4, &H0)
 
 END FUNCTION
 
-FUNCTION rol& (n AS LONG, b AS INTEGER)
-' Rotate 32-bit unsigned integer n left b bits (1-31).
+FUNCTION rol10& (n AS LONG)
 
 DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
 
-' bits 31...32-b -> b-1...0
-target1 = (n AND NOT pow2m1(32 - b)) \ pow2(32 - b) AND pow2m1(b)
+target1 = (n AND &HFFC00000) \ &H400000 AND &H3FF  ' bits 31-22 -> 9-0
+target2 = -(n AND &H200000) AND &H80000000         ' bit 21 -> 31
+target3 = (n AND &H1FFFFF) * &H400                 ' bits 20-0 -> 30-10
 
-' bit 31-b -> 31
-target2 = -(n AND pow2(31 - b)) AND &H80000000
+rol10 = target1 OR target2 OR target3
 
-' bits 30-b...0 -> 30...b (only if b < 31)
-target3 = (n AND pow2m1(31 - b)) * pow2(b)
+END FUNCTION
 
-rol = target1 OR target2 OR target3
+FUNCTION rol11& (n AS LONG)
+
+DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
+
+target1 = (n AND &HFFE00000) \ &H200000 AND &H7FF  ' bits 31-21 -> 10-0
+target2 = -(n AND &H100000) AND &H80000000         ' bit 20 -> 31
+target3 = (n AND &HFFFFF) * &H800                  ' bits 19-0 -> 30-11
+
+rol11 = target1 OR target2 OR target3
 
 END FUNCTION
 
 FUNCTION rol12& (n AS LONG)
-' Rotate 32-bit unsigned integer n left 12 bits.
 
 DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
 
@@ -346,8 +362,43 @@ rol12 = target1 OR target2 OR target3
 
 END FUNCTION
 
+FUNCTION rol14& (n AS LONG)
+
+DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
+
+target1 = (n AND &HFFFC0000) \ &H40000 AND &H3FFF  ' bits 31-18 -> 13-0
+target2 = -(n AND &H20000) AND &H80000000          ' bit 17 -> 31
+target3 = (n AND &H1FFFF) * &H4000                 ' bits 16-0 -> 30-14
+
+rol14 = target1 OR target2 OR target3
+
+END FUNCTION
+
+FUNCTION rol15& (n AS LONG)
+
+DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
+
+target1 = (n AND &HFFFE0000) \ &H20000 AND &H7FFF&  ' bits 31-17 -> 14-0
+target2 = -(n AND &H10000) AND &H80000000           ' bit 16 -> 31
+target3 = (n AND &HFFFF&) * &H8000&                 ' bits 15-0 -> 30-15
+
+rol15 = target1 OR target2 OR target3
+
+END FUNCTION
+
+FUNCTION rol16& (n AS LONG)
+
+DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
+
+target1 = (n AND &HFFFF0000) \ &H10000 AND &HFFFF&  ' bits 31-16 -> 15-0
+target2 = -(n AND &H8000&) AND &H80000000           ' bit 15 -> 31
+target3 = (n AND &H7FFF&) * &H10000                 ' bits 14-0 -> 30-16
+
+rol16 = target1 OR target2 OR target3
+
+END FUNCTION
+
 FUNCTION rol17& (n AS LONG)
-' Rotate 32-bit unsigned integer n left 17 bits.
 
 DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
 
@@ -359,8 +410,31 @@ rol17 = target1 OR target2 OR target3
 
 END FUNCTION
 
+FUNCTION rol20& (n AS LONG)
+
+DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
+
+target1 = (n AND &HFFFFF000) \ &H1000 AND &HFFFFF  ' bits 31-12 -> 19-0
+target2 = -(n AND &H800) AND &H80000000            ' bit 11 -> 31
+target3 = (n AND &H7FF) * &H100000                 ' bits 10-0 -> 30-20
+
+rol20 = target1 OR target2 OR target3
+
+END FUNCTION
+
+FUNCTION rol21& (n AS LONG)
+
+DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
+
+target1 = (n AND &HFFFFF800) \ &H800 AND &H1FFFFF  ' bits 31-11 -> 20-0
+target2 = -(n AND &H400) AND &H80000000            ' bit 10 -> 31
+target3 = (n AND &H3FF) * &H200000                 ' bits 9-0 -> 30-21
+
+rol21 = target1 OR target2 OR target3
+
+END FUNCTION
+
 FUNCTION rol22& (n AS LONG)
-' Rotate 32-bit unsigned integer n left 22 bits.
 
 DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
 
@@ -372,8 +446,55 @@ rol22 = target1 OR target2 OR target3
 
 END FUNCTION
 
+FUNCTION rol23& (n AS LONG)
+
+DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
+
+target1 = (n AND &HFFFFFE00) \ &H200 AND &H7FFFFF  ' bits 31-9 -> 22-0
+target2 = -(n AND &H100) AND &H80000000            ' bit 8 -> 31
+target3 = (n AND &HFF) * &H800000                  ' bits 7-0 -> 30-23
+
+rol23 = target1 OR target2 OR target3
+
+END FUNCTION
+
+FUNCTION rol4& (n AS LONG)
+
+DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
+
+target1 = (n AND &HF0000000) \ &H10000000 AND &HF  ' bits 31-28 -> 3-0
+target2 = -(n AND &H8000000) AND &H80000000        ' bit 27 -> 31
+target3 = (n AND &H7FFFFFF) * &H10                 ' bits 26-0 -> 30-4
+
+rol4 = target1 OR target2 OR target3
+
+END FUNCTION
+
+FUNCTION rol5& (n AS LONG)
+
+DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
+
+target1 = (n AND &HF8000000) \ &H8000000 AND &H1F  ' bits 31-27 -> 4-0
+target2 = -(n AND &H4000000) AND &H80000000        ' bit 26 -> 31
+target3 = (n AND &H3FFFFFF) * &H20                 ' bits 25-0 -> 30-5
+
+rol5 = target1 OR target2 OR target3
+
+END FUNCTION
+
+FUNCTION rol6& (n AS LONG)
+
+DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
+
+target1 = (n AND &HFC000000) \ &H4000000 AND &H3F  ' bits 31-26 -> 5-0
+target2 = -(n AND &H2000000) AND &H80000000        ' bit 25 -> 31
+target3 = (n AND &H1FFFFFF) * &H40                 ' bits 24-0 -> 30-6
+
+rol6 = target1 OR target2 OR target3
+
+END FUNCTION
+
 FUNCTION rol7& (n AS LONG)
-' Rotate 32-bit unsigned integer n left 7 bits.
 
 DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
 
@@ -382,6 +503,18 @@ target2 = -(n AND &H1000000) AND &H80000000        ' bit 24 -> 31
 target3 = (n AND &HFFFFFF) * &H80                  ' bits 23-0 -> 30-7
 
 rol7 = target1 OR target2 OR target3
+
+END FUNCTION
+
+FUNCTION rol9& (n AS LONG)
+
+DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
+
+target1 = (n AND &HFF800000) \ &H800000 AND &H1FF  ' bits 31-23 -> 8-0
+target2 = -(n AND &H400000) AND &H80000000         ' bit 22 -> 31
+target3 = (n AND &H3FFFFF) * &H200                 ' bits 21-0 -> 30-9
+
+rol9 = target1 OR target2 OR target3
 
 END FUNCTION
 
