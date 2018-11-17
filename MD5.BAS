@@ -253,7 +253,7 @@ END FUNCTION
 
 FUNCTION longtohex$ (n AS LONG)
 ' Convert a long into a hexadecimal string, with the bytes in little-endian
-' order. E.g. &HABCD -> "cdab0000"
+' order. E.g. &HABCD& -> "cdab0000"
 
 DIM bigendian AS STRING
 DIM littleendian AS STRING
@@ -403,7 +403,7 @@ FUNCTION rol17& (n AS LONG)
 DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
 
 target1 = (n AND &HFFFF8000) \ &H8000& AND &H1FFFF  ' bits 31-15 -> 16-0
-target2 = -(n AND &H4000&) AND &H80000000           ' bit 14 -> 31
+target2 = -(n AND &H4000) AND &H80000000            ' bit 14 -> 31
 target3 = (n AND &H3FFF) * &H20000                  ' bits 13-0 -> 30-17
 
 rol17 = target1 OR target2 OR target3
@@ -524,6 +524,7 @@ IF md5("") <> "d41d8cd98f00b204e9800998ecf8427e" THEN STOP
 IF md5("A") <> "7fc56270e7a70fa81a5935b72eacbe29" THEN STOP
 IF md5("abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabc") <> "0d7ae056b2f015cd7dc67494efd658f1" THEN STOP
 IF md5("ximaz") <> "61529519452809720693702583126814" THEN STOP
+IF md5("cbaabcdljdac") <> "cadbfdfecdcdcdacdbbbfadbcccefabd" THEN STOP
 
 PRINT "Tests passed."
 
