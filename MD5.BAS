@@ -15,46 +15,17 @@ DECLARE FUNCTION rol17& (n AS LONG)
 DECLARE FUNCTION rol12& (n AS LONG)
 DECLARE FUNCTION rol7& (n AS LONG)
 DECLARE FUNCTION add& (a AS LONG, b AS LONG)
-DECLARE FUNCTION preparemessage$ (msg AS STRING)
-DECLARE FUNCTION longtohex$ (n AS LONG)
 DECLARE FUNCTION add4& (a AS LONG, b AS LONG, c AS LONG, d AS LONG)
-DECLARE FUNCTION hashchunk$ (state AS STRING, chunkstr AS STRING)
+DECLARE FUNCTION hashchunk$ (state() AS LONG, chunk() AS LONG)
 DECLARE SUB tests ()
-DECLARE FUNCTION md5$ (msg AS STRING)
+DECLARE FUNCTION md5$ (message AS STRING)
+DECLARE FUNCTION binhex$ (bin AS STRING)
+DECLARE FUNCTION preparemessage$ (message AS STRING)
 
 ' Note: the functions rolX rotate a 32-bit unsigned integer left X bits.
 
-' powers of two (2^0 ... 2^31) in hexadecimal
-DATA 00000001,00000002,00000004,00000008,00000010,00000020,00000040,00000080
-DATA 00000100,00000200,00000400,00000800,00001000,00002000,00004000,00008000
-DATA 00010000,00020000,00040000,00080000,00100000,00200000,00400000,00800000
-DATA 01000000,02000000,04000000,08000000,10000000,20000000,40000000,80000000
-
-' powers of two, minus one (2^0-1 ... 2^31-1) in hexadecimal
-DATA 00000000,00000001,00000003,00000007,0000000f,0000001f,0000003f,0000007f
-DATA 000000ff,000001ff,000003ff,000007ff,00000fff,00001fff,00003fff,00007fff
-DATA 0000ffff,0001ffff,0003ffff,0007ffff,000fffff,001fffff,003fffff,007fffff
-DATA 00ffffff,01ffffff,03ffffff,07ffffff,0fffffff,1fffffff,3fffffff,7fffffff
-
-DIM SHARED pow2(31) AS LONG  ' powers of two
-DIM SHARED pow2m1(31) AS LONG  ' powers of two, minus one
-
-DIM msg AS STRING  ' message to hash
-DIM i AS INTEGER  ' loop index
-
-' copy DATA to arrays
-FOR i = 0 TO 31
-    READ v$
-    ' force VAL() to interpret hexadecimal 8000...FFFF as 32-bit
-    IF LEFT$(v$, 4) = "0000" THEN v$ = v$ + "&"
-    pow2(i) = VAL("&H" + v$)
-NEXT
-FOR i = 0 TO 31
-    READ v$
-    ' force VAL() to interpret hexadecimal 8000...FFFF as 32-bit
-    IF LEFT$(v$, 4) = "0000" THEN v$ = v$ + "&"
-    pow2m1(i) = VAL("&H" + v$)
-NEXT
+' the initial state of the algorithm
+DATA &H67452301, &HEFCDAB89, &H98BADCFE, &H10325476
 
 CLS
 CALL tests
@@ -84,31 +55,50 @@ END FUNCTION
 FUNCTION add4& (a AS LONG, b AS LONG, c AS LONG, d AS LONG)
 ' Add four 32-bit unsigned integers a, b, c, d. Return sum modulo 2^32.
 
-add4 = add(a, add(b, add(c, d)))
+DIM losum AS LONG, hisum AS LONG, temp AS LONG
+
+' add lower half of each argument together
+losum = (a AND &HFFFF&) + (b AND &HFFFF&) + (c AND &HFFFF&) + (d AND &HFFFF&)
+
+' take arguments and losum, shift each one right 16 bits, add together
+hisum = (a AND &HFFFF0000) \ &H10000 AND &HFFFF&
+hisum = hisum + ((b AND &HFFFF0000) \ &H10000 AND &HFFFF&)
+hisum = hisum + ((c AND &HFFFF0000) \ &H10000 AND &HFFFF&)
+hisum = hisum + ((d AND &HFFFF0000) \ &H10000 AND &HFFFF&)
+hisum = hisum + ((losum AND &HFFFF0000) \ &H10000 AND &HFFFF&)
+
+' shift hisum left 16 bits
+temp = -(hisum AND &H8000&) AND &H80000000
+hisum = temp OR (hisum AND &H7FFF&) * &H10000
+
+' combine hisum with low 32 bits of losum
+add4 = hisum OR losum AND &HFFFF&
 
 END FUNCTION
 
-FUNCTION hashchunk$ (state AS STRING, chunkstr AS STRING)
-' Hash one chunk of the message.
-' state: the current state of the algorithm (4 long integers as 16 bytes)
-' chunkstr: the chunk to hash (16 long integers as 64 bytes)
-' return: the chunk's hash (4 long integers as 16 bytes)
+FUNCTION binhex$ (bin AS STRING)
+' Convert a string into hexadecimal. E.g. "AB" -> "4142".
+
+hexa$ = ""
+FOR i% = 1 TO LEN(bin)
+    hexa$ = hexa$ + RIGHT$("0" + LCASE$(HEX$(ASC(MID$(bin, i%, 1)))), 2)
+NEXT
+
+binhex$ = hexa$
+
+END FUNCTION
+
+FUNCTION hashchunk$ (state() AS LONG, chunk() AS LONG)
+' Hash one chunk of the message. Optimized for speed.
+' state(): the current state of the algorithm (4 LONGs as 16 bytes)
+' chunk(): the chunk to hash (16 LONGs as 64 bytes)
+' return: the hash of the chunk (4 LONGs as 16 bytes)
 
 DIM a AS LONG, b AS LONG, c AS LONG, d AS LONG  ' state of algorithm
-DIM chunk(15) AS LONG  ' the chunk
-DIM i AS INTEGER  ' loop variable
-DIM t AS LONG  ' temporary variable
+DIM t AS LONG                                   ' temporary variable
 
-' convert the state of the algorithm into long integers
-a = CVL(LEFT$(state, 4))
-b = CVL(MID$(state, 5, 4))
-c = CVL(MID$(state, 9, 4))
-d = CVL(RIGHT$(state, 4))
-
-' convert the chunk into long integers
-FOR i = 0 TO 15
-    chunk(i) = CVL(MID$(chunkstr, i * 4 + 1, 4))
-NEXT
+' copy the state to variables
+a = state(0): b = state(1): c = state(2): d = state(3)
 
 ' rounds 0-15
 t = add4(b AND c OR d AND NOT b, chunk(0), &HD76AA478, a)
@@ -251,280 +241,218 @@ hashchunk$ = MKL$(a) + MKL$(b) + MKL$(c) + MKL$(d)
 
 END FUNCTION
 
-FUNCTION longtohex$ (n AS LONG)
-' Convert a long into a hexadecimal string, with the bytes in little-endian
-' order. E.g. &HABCD& -> "cdab0000"
-
-DIM bigendian AS STRING
-DIM littleendian AS STRING
-DIM byte AS INTEGER
-DIM i AS INTEGER
-
-bigendian = MKL$(n)
-littleendian = ""
-FOR i = 1 TO 4
-    byte = ASC(MID$(bigendian, i, 1))
-    littleendian = littleendian + RIGHT$("0" + LCASE$(HEX$(byte)), 2)
-NEXT
-
-longtohex$ = littleendian
-
-END FUNCTION
-
-FUNCTION md5$ (msg AS STRING)
+FUNCTION md5$ (message AS STRING)
 ' Compute an MD5 hash.
 ' In: a string (0 to 55 bytes).
+' Out: the hash as bytes (128 bits as 16 bytes).
 
-DIM a AS LONG, b AS LONG, c AS LONG, d AS LONG  ' state of algorithm
-DIM statestr AS STRING  ' state of algorithm as bytes
-DIM chunkhash AS STRING  ' hash of chunk
-DIM newstate(3) AS LONG  ' integers to add to the state
+DIM state(3) AS LONG     ' the state of the algorithm
+DIM statestr AS STRING   ' the state of the algorithm as bytes
+DIM chunkhash AS STRING  ' the hash of one chunk
+DIM chunkpos AS INTEGER
+DIM chunk(15) AS LONG
+DIM i AS INTEGER
 
-' prepare the message
-msg = preparemessage(msg)
+' pad the message to a multiple of 64 bytes
+message = preparemessage(message)
 
-' initialize the state
-a = &H67452301
-b = &HEFCDAB89
-c = &H98BADCFE
-d = &H10325476
+' initialize the state of the algorithm (128 bits)
+RESTORE
+FOR i = 0 TO 3
+    READ state(i)
+NEXT
 
-' convert state into bytes
-statestr = MKL$(a) + MKL$(b) + MKL$(c) + MKL$(d)
+' process the message in chunks of 64 bytes (512 bits)
+FOR chunkpos = 1 TO LEN(message) STEP 64
+    ' convert the chunk into long integers
+    FOR i = 0 TO 15
+        chunk(i) = CVL(MID$(message, chunkpos + i * 4, 4))
+    NEXT
 
-' hash the chunk
-chunkhash = hashchunk(statestr, msg)
+    ' hash the chunk with the current state
+    ' (the output is 4 long integers in 16 bytes)
+    chunkhash = hashchunk(state(), chunk())
 
-' add the chunk's hash to the current state
-a = add(a, CVL(LEFT$(chunkhash, 4)))
-b = add(b, CVL(MID$(chunkhash, 5, 4)))
-c = add(c, CVL(MID$(chunkhash, 9, 4)))
-d = add(d, CVL(RIGHT$(chunkhash, 4)))
+    ' add each long integer of the chunk hash to the current state
+    FOR i = 0 TO 3
+        state(i) = add(state(i), CVL(MID$(chunkhash, 4 * i + 1, 4)))
+    NEXT
+NEXT
 
-' return the hash as a hexadecimal string
-md5$ = longtohex(a) + longtohex(b) + longtohex(c) + longtohex(d)
+' the final state is the hash of the message; return it as bytes
+statestr = ""
+FOR i = 0 TO 3
+    statestr = statestr + MKL$(state(i))
+NEXT
+md5$ = statestr
 
 END FUNCTION
 
-FUNCTION preparemessage$ (msg AS STRING)
-' Prepare a message for hashing.
-' msg: 0-55 bytes
-' return: 64 bytes
+FUNCTION preparemessage$ (message AS STRING)
+' Prepare the message for hashing.
+' The output is always a multiple of 64 bytes.
 
-DIM origlen AS INTEGER
+DIM origbits AS LONG
+DIM padsize AS INTEGER
 
-origlen = LEN(msg)
+' store original length of message in bits
+origbits = LEN(message) * 8
 
 ' append the byte &H80
-msg = msg + CHR$(&H80)
+message = message + CHR$(&H80)
 
-' pad to 56 bytes using byte &H00
-msg = msg + STRING$(56 - LEN(msg), &H0)
+' pad the message length to the next n*64+56 bytes using byte &H00
+padsize = (56 + 64 - LEN(message) MOD 64) MOD 64
+message = message + STRING$(padsize, &H0)
 
 ' append original length in bits (8 bytes, little endian)
-preparemessage$ = msg + MKL$(origlen% * 8) + STRING$(4, &H0)
+preparemessage = message + MKL$(origbits) + MKL$(&H0)
 
 END FUNCTION
 
 FUNCTION rol10& (n AS LONG)
-
 DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
-
 target1 = (n AND &HFFC00000) \ &H400000 AND &H3FF  ' bits 31-22 -> 9-0
 target2 = -(n AND &H200000) AND &H80000000         ' bit 21 -> 31
 target3 = (n AND &H1FFFFF) * &H400                 ' bits 20-0 -> 30-10
-
 rol10 = target1 OR target2 OR target3
-
 END FUNCTION
 
 FUNCTION rol11& (n AS LONG)
-
 DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
-
 target1 = (n AND &HFFE00000) \ &H200000 AND &H7FF  ' bits 31-21 -> 10-0
 target2 = -(n AND &H100000) AND &H80000000         ' bit 20 -> 31
 target3 = (n AND &HFFFFF) * &H800                  ' bits 19-0 -> 30-11
-
 rol11 = target1 OR target2 OR target3
-
 END FUNCTION
 
 FUNCTION rol12& (n AS LONG)
-
 DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
-
 target1 = (n AND &HFFF00000) \ &H100000 AND &HFFF  ' bits 31-20 -> 11-0
 target2 = -(n AND &H80000) AND &H80000000          ' bit 19 -> 31
 target3 = (n AND &H7FFFF) * &H1000                 ' bits 18-0 -> 30-12
-
 rol12 = target1 OR target2 OR target3
-
 END FUNCTION
 
 FUNCTION rol14& (n AS LONG)
-
 DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
-
 target1 = (n AND &HFFFC0000) \ &H40000 AND &H3FFF  ' bits 31-18 -> 13-0
 target2 = -(n AND &H20000) AND &H80000000          ' bit 17 -> 31
 target3 = (n AND &H1FFFF) * &H4000                 ' bits 16-0 -> 30-14
-
 rol14 = target1 OR target2 OR target3
-
 END FUNCTION
 
 FUNCTION rol15& (n AS LONG)
-
 DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
-
 target1 = (n AND &HFFFE0000) \ &H20000 AND &H7FFF&  ' bits 31-17 -> 14-0
 target2 = -(n AND &H10000) AND &H80000000           ' bit 16 -> 31
 target3 = (n AND &HFFFF&) * &H8000&                 ' bits 15-0 -> 30-15
-
 rol15 = target1 OR target2 OR target3
-
 END FUNCTION
 
 FUNCTION rol16& (n AS LONG)
-
 DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
-
 target1 = (n AND &HFFFF0000) \ &H10000 AND &HFFFF&  ' bits 31-16 -> 15-0
 target2 = -(n AND &H8000&) AND &H80000000           ' bit 15 -> 31
 target3 = (n AND &H7FFF&) * &H10000                 ' bits 14-0 -> 30-16
-
 rol16 = target1 OR target2 OR target3
-
 END FUNCTION
 
 FUNCTION rol17& (n AS LONG)
-
 DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
-
 target1 = (n AND &HFFFF8000) \ &H8000& AND &H1FFFF  ' bits 31-15 -> 16-0
 target2 = -(n AND &H4000) AND &H80000000            ' bit 14 -> 31
 target3 = (n AND &H3FFF) * &H20000                  ' bits 13-0 -> 30-17
-
 rol17 = target1 OR target2 OR target3
-
 END FUNCTION
 
 FUNCTION rol20& (n AS LONG)
-
 DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
-
 target1 = (n AND &HFFFFF000) \ &H1000 AND &HFFFFF  ' bits 31-12 -> 19-0
 target2 = -(n AND &H800) AND &H80000000            ' bit 11 -> 31
 target3 = (n AND &H7FF) * &H100000                 ' bits 10-0 -> 30-20
-
 rol20 = target1 OR target2 OR target3
-
 END FUNCTION
 
 FUNCTION rol21& (n AS LONG)
-
 DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
-
 target1 = (n AND &HFFFFF800) \ &H800 AND &H1FFFFF  ' bits 31-11 -> 20-0
 target2 = -(n AND &H400) AND &H80000000            ' bit 10 -> 31
 target3 = (n AND &H3FF) * &H200000                 ' bits 9-0 -> 30-21
-
 rol21 = target1 OR target2 OR target3
-
 END FUNCTION
 
 FUNCTION rol22& (n AS LONG)
-
 DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
-
 target1 = (n AND &HFFFFFC00) \ &H400 AND &H3FFFFF  ' bits 31-10 -> 21-0
 target2 = -(n AND &H200) AND &H80000000            ' bit 9 -> 31
 target3 = (n AND &H1FF) * &H400000                 ' bits 8-0 -> 30-22
-
 rol22 = target1 OR target2 OR target3
-
 END FUNCTION
 
 FUNCTION rol23& (n AS LONG)
-
 DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
-
 target1 = (n AND &HFFFFFE00) \ &H200 AND &H7FFFFF  ' bits 31-9 -> 22-0
 target2 = -(n AND &H100) AND &H80000000            ' bit 8 -> 31
 target3 = (n AND &HFF) * &H800000                  ' bits 7-0 -> 30-23
-
 rol23 = target1 OR target2 OR target3
-
 END FUNCTION
 
 FUNCTION rol4& (n AS LONG)
-
 DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
-
 target1 = (n AND &HF0000000) \ &H10000000 AND &HF  ' bits 31-28 -> 3-0
 target2 = -(n AND &H8000000) AND &H80000000        ' bit 27 -> 31
 target3 = (n AND &H7FFFFFF) * &H10                 ' bits 26-0 -> 30-4
-
 rol4 = target1 OR target2 OR target3
-
 END FUNCTION
 
 FUNCTION rol5& (n AS LONG)
-
 DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
-
 target1 = (n AND &HF8000000) \ &H8000000 AND &H1F  ' bits 31-27 -> 4-0
 target2 = -(n AND &H4000000) AND &H80000000        ' bit 26 -> 31
 target3 = (n AND &H3FFFFFF) * &H20                 ' bits 25-0 -> 30-5
-
 rol5 = target1 OR target2 OR target3
-
 END FUNCTION
 
 FUNCTION rol6& (n AS LONG)
-
 DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
-
 target1 = (n AND &HFC000000) \ &H4000000 AND &H3F  ' bits 31-26 -> 5-0
 target2 = -(n AND &H2000000) AND &H80000000        ' bit 25 -> 31
 target3 = (n AND &H1FFFFFF) * &H40                 ' bits 24-0 -> 30-6
-
 rol6 = target1 OR target2 OR target3
-
 END FUNCTION
 
 FUNCTION rol7& (n AS LONG)
-
 DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
-
 target1 = (n AND &HFE000000) \ &H2000000 AND &H7F  ' bits 31-25 -> 6-0
 target2 = -(n AND &H1000000) AND &H80000000        ' bit 24 -> 31
 target3 = (n AND &HFFFFFF) * &H80                  ' bits 23-0 -> 30-7
-
 rol7 = target1 OR target2 OR target3
-
 END FUNCTION
 
 FUNCTION rol9& (n AS LONG)
-
 DIM target1 AS LONG, target2 AS LONG, target3 AS LONG
-
 target1 = (n AND &HFF800000) \ &H800000 AND &H1FF  ' bits 31-23 -> 8-0
 target2 = -(n AND &H400000) AND &H80000000         ' bit 22 -> 31
 target3 = (n AND &H3FFFFF) * &H200                 ' bits 21-0 -> 30-9
-
 rol9 = target1 OR target2 OR target3
-
 END FUNCTION
 
 SUB tests
 
-IF md5("") <> "d41d8cd98f00b204e9800998ecf8427e" THEN STOP
-IF md5("A") <> "7fc56270e7a70fa81a5935b72eacbe29" THEN STOP
-IF md5("abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabc") <> "0d7ae056b2f015cd7dc67494efd658f1" THEN STOP
-IF md5("ximaz") <> "61529519452809720693702583126814" THEN STOP
-IF md5("cbaabcdljdac") <> "cadbfdfecdcdcdacdbbbfadbcccefabd" THEN STOP
+IF binhex(md5("")) <> "d41d8cd98f00b204e9800998ecf8427e" THEN STOP
+IF binhex(md5("A")) <> "7fc56270e7a70fa81a5935b72eacbe29" THEN STOP
+IF binhex(md5("password")) <> "5f4dcc3b5aa765d61d8327deb882cf99" THEN STOP
+IF binhex(md5(CHR$(&H0) + CHR$(&HFF) + CHR$(&HF) + CHR$(&HF0) + CHR$(&H33) + CHR$(&HCC) + CHR$(&H55) + CHR$(&HAA))) <> "cb16906543c272af4b8dae1a4c5fe49e" THEN STOP
+
+' near the length of one chunk
+IF binhex(md5(STRING$(55, "a"))) <> "ef1772b6dff9a122358552954ad0df65" THEN STOP
+IF binhex(md5(STRING$(56, "a"))) <> "3b0c8ac703f828b04c6c197006d17218" THEN STOP
+IF binhex(md5(STRING$(57, "a"))) <> "652b906d60af96844ebd21b674f35e93" THEN STOP
+
+' interesting hashes
+IF binhex(md5("ximaz")) <> "61529519452809720693702583126814" THEN STOP
+IF binhex(md5("cbaabcdljdac")) <> "cadbfdfecdcdcdacdbbbfadbcccefabd" THEN STOP
 
 PRINT "Tests passed."
 
