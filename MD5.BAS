@@ -261,8 +261,8 @@ longtohex$ = littleendian
 END FUNCTION
 
 FUNCTION md5$ (msg AS STRING)
-' Compute MD5 hash.
-' In: a prepared string (always 64 bytes, i.e., one MD5 chunk).
+' Compute an MD5 hash.
+' In: a string (0 to 55 bytes).
 
 DIM a AS LONG, b AS LONG, c AS LONG, d AS LONG  ' state of algorithm
 DIM statestr AS STRING  ' state of algorithm as bytes
