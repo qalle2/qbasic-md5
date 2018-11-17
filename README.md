@@ -1,5 +1,5 @@
 # qbasic-md5
-Computes the MD5 hash of a string (0&ndash;55 bytes).
+A Microsoft QBasic program that computes the MD5 hash of a string (0&ndash;55 bytes).
 
 To do: optimize the bit rotation functions.
 
