@@ -5,3 +5,4 @@ Note: after publishing my program, I discovered [a similar one](http://forum.qba
 
 ## References
 * [MD5 pseudocode](http://en.wikipedia.org/wiki/MD5#Pseudocode) (Wikipedia)
+* [another QBasic MD5 implementation](http://forum.qbasicnews.com/index.php?topic=13371.0) by Qbasicnews.com user stylin (I discovered this one only after publishing my program; however, I stole the idea of avoiding the many reassignments of the state variables `a`, `b`, `c` and `d` in `hashchunk()`)
