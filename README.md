@@ -1,7 +1,11 @@
 # qbasic-md5
 A Microsoft QBasic program that computes the MD5 hash of a string.
 
-Note: after publishing my program, I discovered [a similar one](http://forum.qbasicnews.com/index.php?topic=13371.0) by Qbasicnews.com user stylin. My program seems faster, though.
+Features:
+* message length: 0&ndash;8192 bytes
+* speed (tested under DOSBox):
+  * full emulation speed on my computer: about 170 hashes/second
+  * at 4000 cycles/millisecond: about 7 hashes/second
 
 ## Comments on some procedures
 
