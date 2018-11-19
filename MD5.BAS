@@ -17,10 +17,11 @@ DECLARE FUNCTION rol7& (n AS LONG)
 DECLARE FUNCTION add& (a AS LONG, b AS LONG)
 DECLARE FUNCTION add4& (a AS LONG, b AS LONG, c AS LONG, d AS LONG)
 DECLARE FUNCTION hashchunk$ (state() AS LONG, chunk() AS LONG)
-DECLARE SUB tests ()
 DECLARE FUNCTION md5$ (message AS STRING)
 DECLARE FUNCTION binhex$ (bin AS STRING)
 DECLARE FUNCTION preparemessage$ (message AS STRING)
+DECLARE SUB testcorrectness ()
+DECLARE SUB testspeed ()
 
 ' Note: the functions rolX rotate a 32-bit unsigned integer left X bits.
 
@@ -28,27 +29,41 @@ DECLARE FUNCTION preparemessage$ (message AS STRING)
 DATA &H67452301, &HEFCDAB89, &H98BADCFE, &H10325476
 
 CLS
-CALL tests
+CALL testcorrectness
+'CALL testspeed
 
 FUNCTION add& (a AS LONG, b AS LONG)
 ' Add two 32-bit unsigned integers a, b. Return sum modulo 2^32.
-
+' See the readme file for comments.
+'
 ' How a full adder works:
 '   The inputs: A, B, Cin (carry in)
 '   The outputs:
 '     Q = A XOR B XOR Cin
 '     Cout (carry out) = (A AND B) OR (A AND Cin) OR (B AND Cin)
 
-DIM sumlow AS LONG, carry AS LONG
+DIM losum AS LONG, carry AS LONG
 
-' sum of bits 29...0 of a and b, with carry out in bit 30
-sumlow = (a AND &H3FFFFFFF) + (b AND &H3FFFFFFF)
+' add bits 29...0 of each argument (the carry out will be in bit 30)
+losum = (a AND &H3FFFFFFF) + (b AND &H3FFFFFFF)
 
-' carry for bit 31
-carry = (a AND b) OR (a AND sumlow) OR (b AND sumlow)
+' carry for bit 31 (&H80000000 if at least two of a, b and losum have
+' bit 30 set, otherwise &H0)
+carry = (a AND b) OR (a AND losum) OR (b AND losum)
 carry = -(carry AND &H40000000) AND &H80000000
 
-add = (sumlow OR carry) XOR ((a XOR b) AND &HC0000000)
+' bit  31     of sum: ((a XOR b) AND &H80000000) XOR carry
+' bit  30     of sum: (a XOR b XOR losum) AND &H40000000
+' bits 29...0 of sum: losum AND &H3FFFFFFF
+' -> bits 30...0 of sum: ((a XOR b) AND &H40000000) XOR losum
+' -> sum:
+'    (
+'      ((a XOR b) AND &H80000000) XOR carry
+'    ) OR (
+'      ((a XOR b) AND &H40000000) XOR losum
+'    )
+' carry and losum do not "overlap", so:
+add = (carry OR losum) XOR ((a XOR b) AND &HC0000000)
 
 END FUNCTION
 
@@ -77,15 +92,13 @@ add4 = hisum OR losum AND &HFFFF&
 END FUNCTION
 
 FUNCTION binhex$ (bin AS STRING)
-' Convert a string into hexadecimal. E.g. "AB" -> "4142".
-
-hexa$ = ""
-FOR i% = 1 TO LEN(bin)
-    hexa$ = hexa$ + RIGHT$("0" + LCASE$(HEX$(ASC(MID$(bin, i%, 1)))), 2)
-NEXT
-
-binhex$ = hexa$
-
+    ' Convert a string into hexadecimal. E.g. "AB" -> "4142".
+    DIM hexa AS STRING, i AS INTEGER
+    hexa = ""
+    FOR i = 1 TO LEN(bin)
+        hexa = hexa + RIGHT$("0" + LCASE$(HEX$(ASC(MID$(bin, i, 1)))), 2)
+    NEXT
+    binhex$ = hexa
 END FUNCTION
 
 FUNCTION hashchunk$ (state() AS LONG, chunk() AS LONG)
@@ -95,146 +108,97 @@ FUNCTION hashchunk$ (state() AS LONG, chunk() AS LONG)
 ' return: the hash of the chunk (4 LONGs as 16 bytes)
 
 DIM a AS LONG, b AS LONG, c AS LONG, d AS LONG  ' state of algorithm
-DIM t AS LONG                                   ' temporary variable
 
 ' copy the state to variables
 a = state(0): b = state(1): c = state(2): d = state(3)
 
 ' rounds 0-15
-t = add4(b AND c OR d AND NOT b, chunk(0), &HD76AA478, a)
-a = d: d = c: c = b: b = add(b, rol7(t))
-t = add4(b AND c OR d AND NOT b, chunk(1), &HE8C7B756, a)
-a = d: d = c: c = b: b = add(b, rol12(t))
-t = add4(b AND c OR d AND NOT b, chunk(2), &H242070DB, a)
-a = d: d = c: c = b: b = add(b, rol17(t))
-t = add4(b AND c OR d AND NOT b, chunk(3), &HC1BDCEEE, a)
-a = d: d = c: c = b: b = add(b, rol22(t))
-t = add4(b AND c OR d AND NOT b, chunk(4), &HF57C0FAF, a)
-a = d: d = c: c = b: b = add(b, rol7(t))
-t = add4(b AND c OR d AND NOT b, chunk(5), &H4787C62A, a)
-a = d: d = c: c = b: b = add(b, rol12(t))
-t = add4(b AND c OR d AND NOT b, chunk(6), &HA8304613, a)
-a = d: d = c: c = b: b = add(b, rol17(t))
-t = add4(b AND c OR d AND NOT b, chunk(7), &HFD469501, a)
-a = d: d = c: c = b: b = add(b, rol22(t))
-t = add4(b AND c OR d AND NOT b, chunk(8), &H698098D8, a)
-a = d: d = c: c = b: b = add(b, rol7(t))
-t = add4(b AND c OR d AND NOT b, chunk(9), &H8B44F7AF, a)
-a = d: d = c: c = b: b = add(b, rol12(t))
-t = add4(b AND c OR d AND NOT b, chunk(10), &HFFFF5BB1, a)
-a = d: d = c: c = b: b = add(b, rol17(t))
-t = add4(b AND c OR d AND NOT b, chunk(11), &H895CD7BE, a)
-a = d: d = c: c = b: b = add(b, rol22(t))
-t = add4(b AND c OR d AND NOT b, chunk(12), &H6B901122, a)
-a = d: d = c: c = b: b = add(b, rol7(t))
-t = add4(b AND c OR d AND NOT b, chunk(13), &HFD987193, a)
-a = d: d = c: c = b: b = add(b, rol12(t))
-t = add4(b AND c OR d AND NOT b, chunk(14), &HA679438E, a)
-a = d: d = c: c = b: b = add(b, rol17(t))
-t = add4(b AND c OR d AND NOT b, chunk(15), &H49B40821, a)
-a = d: d = c: c = b: b = add(b, rol22(t))
+
+a = add(b, rol7(add4(d XOR (b AND (c XOR d)), chunk(0), &HD76AA478, a)))
+d = add(a, rol12(add4(c XOR (a AND (b XOR c)), chunk(1), &HE8C7B756, d)))
+c = add(d, rol17(add4(b XOR (d AND (a XOR b)), chunk(2), &H242070DB, c)))
+b = add(c, rol22(add4(a XOR (c AND (d XOR a)), chunk(3), &HC1BDCEEE, b)))
+
+a = add(b, rol7(add4(d XOR (b AND (c XOR d)), chunk(4), &HF57C0FAF, a)))
+d = add(a, rol12(add4(c XOR (a AND (b XOR c)), chunk(5), &H4787C62A, d)))
+c = add(d, rol17(add4(b XOR (d AND (a XOR b)), chunk(6), &HA8304613, c)))
+b = add(c, rol22(add4(a XOR (c AND (d XOR a)), chunk(7), &HFD469501, b)))
+
+a = add(b, rol7(add4(d XOR (b AND (c XOR d)), chunk(8), &H698098D8, a)))
+d = add(a, rol12(add4(c XOR (a AND (b XOR c)), chunk(9), &H8B44F7AF, d)))
+c = add(d, rol17(add4(b XOR (d AND (a XOR b)), chunk(10), &HFFFF5BB1, c)))
+b = add(c, rol22(add4(a XOR (c AND (d XOR a)), chunk(11), &H895CD7BE, b)))
+
+a = add(b, rol7(add4(d XOR (b AND (c XOR d)), chunk(12), &H6B901122, a)))
+d = add(a, rol12(add4(c XOR (a AND (b XOR c)), chunk(13), &HFD987193, d)))
+c = add(d, rol17(add4(b XOR (d AND (a XOR b)), chunk(14), &HA679438E, c)))
+b = add(c, rol22(add4(a XOR (c AND (d XOR a)), chunk(15), &H49B40821, b)))
 
 ' rounds 16-31
-t = add4(d AND b OR c AND NOT d, chunk(1), &HF61E2562, a)
-a = d: d = c: c = b: b = add(b, rol5(t))
-t = add4(d AND b OR c AND NOT d, chunk(6), &HC040B340, a)
-a = d: d = c: c = b: b = add(b, rol9(t))
-t = add4(d AND b OR c AND NOT d, chunk(11), &H265E5A51, a)
-a = d: d = c: c = b: b = add(b, rol14(t))
-t = add4(d AND b OR c AND NOT d, chunk(0), &HE9B6C7AA, a)
-a = d: d = c: c = b: b = add(b, rol20(t))
-t = add4(d AND b OR c AND NOT d, chunk(5), &HD62F105D, a)
-a = d: d = c: c = b: b = add(b, rol5(t))
-t = add4(d AND b OR c AND NOT d, chunk(10), &H2441453, a)
-a = d: d = c: c = b: b = add(b, rol9(t))
-t = add4(d AND b OR c AND NOT d, chunk(15), &HD8A1E681, a)
-a = d: d = c: c = b: b = add(b, rol14(t))
-t = add4(d AND b OR c AND NOT d, chunk(4), &HE7D3FBC8, a)
-a = d: d = c: c = b: b = add(b, rol20(t))
-t = add4(d AND b OR c AND NOT d, chunk(9), &H21E1CDE6, a)
-a = d: d = c: c = b: b = add(b, rol5(t))
-t = add4(d AND b OR c AND NOT d, chunk(14), &HC33707D6, a)
-a = d: d = c: c = b: b = add(b, rol9(t))
-t = add4(d AND b OR c AND NOT d, chunk(3), &HF4D50D87, a)
-a = d: d = c: c = b: b = add(b, rol14(t))
-t = add4(d AND b OR c AND NOT d, chunk(8), &H455A14ED, a)
-a = d: d = c: c = b: b = add(b, rol20(t))
-t = add4(d AND b OR c AND NOT d, chunk(13), &HA9E3E905, a)
-a = d: d = c: c = b: b = add(b, rol5(t))
-t = add4(d AND b OR c AND NOT d, chunk(2), &HFCEFA3F8, a)
-a = d: d = c: c = b: b = add(b, rol9(t))
-t = add4(d AND b OR c AND NOT d, chunk(7), &H676F02D9, a)
-a = d: d = c: c = b: b = add(b, rol14(t))
-t = add4(d AND b OR c AND NOT d, chunk(12), &H8D2A4C8A, a)
-a = d: d = c: c = b: b = add(b, rol20(t))
+
+a = add(b, rol5(add4(c XOR (d AND (b XOR c)), chunk(1), &HF61E2562, a)))
+d = add(a, rol9(add4(b XOR (c AND (a XOR b)), chunk(6), &HC040B340, d)))
+c = add(d, rol14(add4(a XOR (b AND (d XOR a)), chunk(11), &H265E5A51, c)))
+b = add(c, rol20(add4(d XOR (a AND (c XOR d)), chunk(0), &HE9B6C7AA, b)))
+
+a = add(b, rol5(add4(c XOR (d AND (b XOR c)), chunk(5), &HD62F105D, a)))
+d = add(a, rol9(add4(b XOR (c AND (a XOR b)), chunk(10), &H2441453, d)))
+c = add(d, rol14(add4(a XOR (b AND (d XOR a)), chunk(15), &HD8A1E681, c)))
+b = add(c, rol20(add4(d XOR (a AND (c XOR d)), chunk(4), &HE7D3FBC8, b)))
+
+a = add(b, rol5(add4(c XOR (d AND (b XOR c)), chunk(9), &H21E1CDE6, a)))
+d = add(a, rol9(add4(b XOR (c AND (a XOR b)), chunk(14), &HC33707D6, d)))
+c = add(d, rol14(add4(a XOR (b AND (d XOR a)), chunk(3), &HF4D50D87, c)))
+b = add(c, rol20(add4(d XOR (a AND (c XOR d)), chunk(8), &H455A14ED, b)))
+
+a = add(b, rol5(add4(c XOR (d AND (b XOR c)), chunk(13), &HA9E3E905, a)))
+d = add(a, rol9(add4(b XOR (c AND (a XOR b)), chunk(2), &HFCEFA3F8, d)))
+c = add(d, rol14(add4(a XOR (b AND (d XOR a)), chunk(7), &H676F02D9, c)))
+b = add(c, rol20(add4(d XOR (a AND (c XOR d)), chunk(12), &H8D2A4C8A, b)))
 
 ' rounds 32-47
-t = add4(b XOR c XOR d, chunk(5), &HFFFA3942, a)
-a = d: d = c: c = b: b = add(b, rol4(t))
-t = add4(b XOR c XOR d, chunk(8), &H8771F681, a)
-a = d: d = c: c = b: b = add(b, rol11(t))
-t = add4(b XOR c XOR d, chunk(11), &H6D9D6122, a)
-a = d: d = c: c = b: b = add(b, rol16(t))
-t = add4(b XOR c XOR d, chunk(14), &HFDE5380C, a)
-a = d: d = c: c = b: b = add(b, rol23(t))
-t = add4(b XOR c XOR d, chunk(1), &HA4BEEA44, a)
-a = d: d = c: c = b: b = add(b, rol4(t))
-t = add4(b XOR c XOR d, chunk(4), &H4BDECFA9, a)
-a = d: d = c: c = b: b = add(b, rol11(t))
-t = add4(b XOR c XOR d, chunk(7), &HF6BB4B60, a)
-a = d: d = c: c = b: b = add(b, rol16(t))
-t = add4(b XOR c XOR d, chunk(10), &HBEBFBC70, a)
-a = d: d = c: c = b: b = add(b, rol23(t))
-t = add4(b XOR c XOR d, chunk(13), &H289B7EC6, a)
-a = d: d = c: c = b: b = add(b, rol4(t))
-t = add4(b XOR c XOR d, chunk(0), &HEAA127FA, a)
-a = d: d = c: c = b: b = add(b, rol11(t))
-t = add4(b XOR c XOR d, chunk(3), &HD4EF3085, a)
-a = d: d = c: c = b: b = add(b, rol16(t))
-t = add4(b XOR c XOR d, chunk(6), &H4881D05, a)
-a = d: d = c: c = b: b = add(b, rol23(t))
-t = add4(b XOR c XOR d, chunk(9), &HD9D4D039, a)
-a = d: d = c: c = b: b = add(b, rol4(t))
-t = add4(b XOR c XOR d, chunk(12), &HE6DB99E5, a)
-a = d: d = c: c = b: b = add(b, rol11(t))
-t = add4(b XOR c XOR d, chunk(15), &H1FA27CF8, a)
-a = d: d = c: c = b: b = add(b, rol16(t))
-t = add4(b XOR c XOR d, chunk(2), &HC4AC5665, a)
-a = d: d = c: c = b: b = add(b, rol23(t))
+
+a = add(b, rol4(add4(b XOR c XOR d, chunk(5), &HFFFA3942, a)))
+d = add(a, rol11(add4(a XOR b XOR c, chunk(8), &H8771F681, d)))
+c = add(d, rol16(add4(d XOR a XOR b, chunk(11), &H6D9D6122, c)))
+b = add(c, rol23(add4(c XOR d XOR a, chunk(14), &HFDE5380C, b)))
+
+a = add(b, rol4(add4(b XOR c XOR d, chunk(1), &HA4BEEA44, a)))
+d = add(a, rol11(add4(a XOR b XOR c, chunk(4), &H4BDECFA9, d)))
+c = add(d, rol16(add4(d XOR a XOR b, chunk(7), &HF6BB4B60, c)))
+b = add(c, rol23(add4(c XOR d XOR a, chunk(10), &HBEBFBC70, b)))
+
+a = add(b, rol4(add4(b XOR c XOR d, chunk(13), &H289B7EC6, a)))
+d = add(a, rol11(add4(a XOR b XOR c, chunk(0), &HEAA127FA, d)))
+c = add(d, rol16(add4(d XOR a XOR b, chunk(3), &HD4EF3085, c)))
+b = add(c, rol23(add4(c XOR d XOR a, chunk(6), &H4881D05, b)))
+
+a = add(b, rol4(add4(b XOR c XOR d, chunk(9), &HD9D4D039, a)))
+d = add(a, rol11(add4(a XOR b XOR c, chunk(12), &HE6DB99E5, d)))
+c = add(d, rol16(add4(d XOR a XOR b, chunk(15), &H1FA27CF8, c)))
+b = add(c, rol23(add4(c XOR d XOR a, chunk(2), &HC4AC5665, b)))
 
 ' rounds 48-63
-t = add4(c XOR (b OR NOT d), chunk(0), &HF4292244, a)
-a = d: d = c: c = b: b = add(b, rol6(t))
-t = add4(c XOR (b OR NOT d), chunk(7), &H432AFF97, a)
-a = d: d = c: c = b: b = add(b, rol10(t))
-t = add4(c XOR (b OR NOT d), chunk(14), &HAB9423A7, a)
-a = d: d = c: c = b: b = add(b, rol15(t))
-t = add4(c XOR (b OR NOT d), chunk(5), &HFC93A039, a)
-a = d: d = c: c = b: b = add(b, rol21(t))
-t = add4(c XOR (b OR NOT d), chunk(12), &H655B59C3, a)
-a = d: d = c: c = b: b = add(b, rol6(t))
-t = add4(c XOR (b OR NOT d), chunk(3), &H8F0CCC92, a)
-a = d: d = c: c = b: b = add(b, rol10(t))
-t = add4(c XOR (b OR NOT d), chunk(10), &HFFEFF47D, a)
-a = d: d = c: c = b: b = add(b, rol15(t))
-t = add4(c XOR (b OR NOT d), chunk(1), &H85845DD1, a)
-a = d: d = c: c = b: b = add(b, rol21(t))
-t = add4(c XOR (b OR NOT d), chunk(8), &H6FA87E4F, a)
-a = d: d = c: c = b: b = add(b, rol6(t))
-t = add4(c XOR (b OR NOT d), chunk(15), &HFE2CE6E0, a)
-a = d: d = c: c = b: b = add(b, rol10(t))
-t = add4(c XOR (b OR NOT d), chunk(6), &HA3014314, a)
-a = d: d = c: c = b: b = add(b, rol15(t))
-t = add4(c XOR (b OR NOT d), chunk(13), &H4E0811A1, a)
-a = d: d = c: c = b: b = add(b, rol21(t))
-t = add4(c XOR (b OR NOT d), chunk(4), &HF7537E82, a)
-a = d: d = c: c = b: b = add(b, rol6(t))
-t = add4(c XOR (b OR NOT d), chunk(11), &HBD3AF235, a)
-a = d: d = c: c = b: b = add(b, rol10(t))
-t = add4(c XOR (b OR NOT d), chunk(2), &H2AD7D2BB, a)
-a = d: d = c: c = b: b = add(b, rol15(t))
-t = add4(c XOR (b OR NOT d), chunk(9), &HEB86D391, a)
-a = d: d = c: c = b: b = add(b, rol21(t))
+
+a = add(b, rol6(add4(c XOR (b OR NOT d), chunk(0), &HF4292244, a)))
+d = add(a, rol10(add4(b XOR (a OR NOT c), chunk(7), &H432AFF97, d)))
+c = add(d, rol15(add4(a XOR (d OR NOT b), chunk(14), &HAB9423A7, c)))
+b = add(c, rol21(add4(d XOR (c OR NOT a), chunk(5), &HFC93A039, b)))
+
+a = add(b, rol6(add4(c XOR (b OR NOT d), chunk(12), &H655B59C3, a)))
+d = add(a, rol10(add4(b XOR (a OR NOT c), chunk(3), &H8F0CCC92, d)))
+c = add(d, rol15(add4(a XOR (d OR NOT b), chunk(10), &HFFEFF47D, c)))
+b = add(c, rol21(add4(d XOR (c OR NOT a), chunk(1), &H85845DD1, b)))
+
+a = add(b, rol6(add4(c XOR (b OR NOT d), chunk(8), &H6FA87E4F, a)))
+d = add(a, rol10(add4(b XOR (a OR NOT c), chunk(15), &HFE2CE6E0, d)))
+c = add(d, rol15(add4(a XOR (d OR NOT b), chunk(6), &HA3014314, c)))
+b = add(c, rol21(add4(d XOR (c OR NOT a), chunk(13), &H4E0811A1, b)))
+
+a = add(b, rol6(add4(c XOR (b OR NOT d), chunk(4), &HF7537E82, a)))
+d = add(a, rol10(add4(b XOR (a OR NOT c), chunk(11), &HBD3AF235, d)))
+c = add(d, rol15(add4(a XOR (d OR NOT b), chunk(2), &H2AD7D2BB, c)))
+b = add(c, rol21(add4(d XOR (c OR NOT a), chunk(9), &HEB86D391, b)))
 
 ' return the hash as a string
 hashchunk$ = MKL$(a) + MKL$(b) + MKL$(c) + MKL$(d)
@@ -438,7 +402,7 @@ target3 = (n AND &H3FFFFF) * &H200                 ' bits 21-0 -> 30-9
 rol9 = target1 OR target2 OR target3
 END FUNCTION
 
-SUB tests
+SUB testcorrectness
 
 IF binhex(md5("")) <> "d41d8cd98f00b204e9800998ecf8427e" THEN STOP
 IF binhex(md5("A")) <> "7fc56270e7a70fa81a5935b72eacbe29" THEN STOP
@@ -455,7 +419,32 @@ IF binhex(md5(STRING$(57, "a"))) <> "652b906d60af96844ebd21b674f35e93" THEN STOP
 IF binhex(md5("ximaz")) <> "61529519452809720693702583126814" THEN STOP
 IF binhex(md5("cbaabcdljdac")) <> "cadbfdfecdcdcdacdbbbfadbcccefabd" THEN STOP
 
-PRINT "Tests passed."
+PRINT "The md5() function appears to work correctly."
+
+END SUB
+
+SUB testspeed
+
+DIM starttime AS SINGLE
+DIM hash AS STRING
+DIM score AS LONG
+
+IF TIMER > 86400 - 15 THEN
+    PRINT "Cannot run the speed test this close to midnight."
+    PRINT "Wait 15 seconds and try again."
+    EXIT SUB
+END IF
+
+PRINT "Computing as many hashes as possible in 10 seconds..."
+
+starttime = TIMER
+
+DO
+    hash = md5("test1")
+    score = score + 1
+LOOP WHILE TIMER - starttime < 10
+
+PRINT "Hashes:"; score
 
 END SUB
 
