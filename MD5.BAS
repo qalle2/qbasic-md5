@@ -1,275 +1,208 @@
-DECLARE FUNCTION hashchunk$ (s0 AS LONG, s1 AS LONG, s2 AS LONG, s3 AS LONG, chunk() AS LONG)
-DECLARE FUNCTION prepmsg$ (msg AS STRING)
-DECLARE SUB testspeed ()
+DECLARE FUNCTION hashchunk$ (origstate&(), chunk&())
+DECLARE FUNCTION prepmsg$ (msg$)
 DECLARE SUB test ()
-DECLARE FUNCTION rol21& (n AS LONG)
-DECLARE FUNCTION rol15& (n AS LONG)
-DECLARE FUNCTION rol10& (n AS LONG)
-DECLARE FUNCTION rol6& (n AS LONG)
-DECLARE FUNCTION rol23& (n AS LONG)
-DECLARE FUNCTION rol16& (n AS LONG)
-DECLARE FUNCTION rol11& (n AS LONG)
-DECLARE FUNCTION rol4& (n AS LONG)
-DECLARE FUNCTION rol20& (n AS LONG)
-DECLARE FUNCTION rol14& (n AS LONG)
-DECLARE FUNCTION rol9& (n AS LONG)
-DECLARE FUNCTION rol5& (n AS LONG)
-DECLARE FUNCTION rol22& (n AS LONG)
-DECLARE FUNCTION rol17& (n AS LONG)
-DECLARE FUNCTION rol12& (n AS LONG)
-DECLARE FUNCTION rol7& (n AS LONG)
-DECLARE FUNCTION add& (a AS LONG, b AS LONG)
-DECLARE FUNCTION add4& (a AS LONG, b AS LONG, c AS LONG, d AS LONG)
-DECLARE FUNCTION md5$ (msg AS STRING)
-DECLARE FUNCTION binhex$ (str AS STRING)
-' initial state
-DATA &H67452301, &HEFCDAB89, &H98BADCFE, &H10325476
+DECLARE FUNCTION add& (a&, b&)
+DECLARE FUNCTION md5$ (msg$)
+DECLARE FUNCTION binhex$ (stri$)
+DECLARE FUNCTION sine& (r%)
+DECLARE FUNCTION rol& (n&, r%)
+DECLARE SUB testspeed ()
+
+DIM SHARED pow2&(31), pow2m1&(31)
+DIM SHARED sines&(63), chunkindexes%(63), rotcounts%(63)
+
+' rotate counts
+DATA 7,12,17,22, 5,9,14,20, 4,11,16,23, 6,10,15,21
+
+' generate powers of 2
+FOR i% = 0 TO 30: pow2&(i%) = 2 ^ i%: NEXT
+pow2&(31) = &H80000000
+
+' generate powers of 2 minus 1
+FOR i% = 0 TO 31: pow2m1&(i%) = 2 ^ i% - 1: NEXT
+
+' generate sine constant table
+FOR i% = 0 TO 63: sines&(i%) = sine&(i%): NEXT
+
+' generate chunk index table
+FOR i% = 0 TO 63
+    IF i% < 16 THEN
+        chunkindexes%(i%) = i%
+    ELSEIF i% < 32 THEN
+        chunkindexes%(i%) = (i% * 5 + 1) MOD 16
+    ELSEIF i% < 48 THEN
+        chunkindexes%(i%) = (i% * 3 + 5) MOD 16
+    ELSE
+        chunkindexes%(i%) = i% * 7 MOD 16
+    END IF
+NEXT
+
+' generate rotate counts table
+FOR i% = 0 TO 3
+    FOR j% = 0 TO 3
+        READ rotcount%
+        FOR k% = 0 TO 3
+            rotcounts%(i% * 16 + k% * 4 + j%) = rotcount%
+        NEXT
+    NEXT
+NEXT
+
 CLS
 CALL test
 'CALL testspeed
 
-FUNCTION add& (a AS LONG, b AS LONG)
-' Add two unsigned LONGs. See readme.
-DIM losum AS LONG, carry AS LONG
-losum = (a AND &H3FFFFFFF) + (b AND &H3FFFFFFF)
-carry = (a AND b) OR (a AND losum) OR (b AND losum)
-carry = -(carry AND &H40000000) AND &H80000000
-add = (carry OR losum) XOR ((a XOR b) AND &HC0000000)
+FUNCTION add& (a&, b&)
+' add two unsigned LONGs
+
+' sum of bits 29-0
+losum& = (a& AND &H3FFFFFFF) + (b& AND &H3FFFFFFF)
+
+' carry for bit 31 (&H80000000 if at least two of a, b and losum have bit 30
+' set)
+carry& = (a& AND b&) OR (a& AND losum&) OR (b& AND losum&)
+carry& = -(carry& AND &H40000000) AND &H80000000
+
+' bits of sum:
+' 31:   (a XOR b XOR carry) AND &H80000000
+' 30:   (a XOR b XOR losum) AND &H40000000
+' 29-0: losum AND &H3FFFFFFF
+' 30-0: ((a XOR b) AND &H40000000) XOR losum
+' 31-0:    ( ((a XOR b) AND &H80000000) XOR carry )
+'       OR ( ((a XOR b) AND &H40000000) XOR losum )
+'     =      ((a XOR b) AND &HC0000000) XOR (carry OR losum)
+
+add& = ((a& XOR b&) AND &HC0000000) XOR (carry& OR losum&)
+
 END FUNCTION
 
-FUNCTION binhex$ (str AS STRING)
+FUNCTION binhex$ (stri$)
 ' Convert string into hexadecimal.
-DIM hexa AS STRING, i AS INTEGER
-hexa = ""
-FOR i = 1 TO LEN(str)
-    hexa = hexa + RIGHT$("0" + LCASE$(HEX$(ASC(MID$(str, i, 1)))), 2)
+
+hexa$ = ""
+FOR i% = 1 TO LEN(stri$)
+    hexa$ = hexa$ + RIGHT$("0" + LCASE$(HEX$(ASC(MID$(stri$, i%, 1)))), 2)
 NEXT
-binhex$ = hexa
+binhex$ = hexa$
+
 END FUNCTION
 
-FUNCTION hashchunk$ (s0 AS LONG, s1 AS LONG, s2 AS LONG, s3 AS LONG, chunk() AS LONG)
-' Hash chunk. s0...s3 = state. chunk(): 16 items. Return 16 bytes.
-DIM a AS LONG, b AS LONG, c AS LONG, d AS LONG
-a = s0: b = s1: c = s2: d = s3
-a = add(b, rol7(add(add(add(d XOR (b AND (c XOR d)), chunk(0)), &HD76AA478), a)))
-d = add(a, rol12(add(add(add(c XOR (a AND (b XOR c)), chunk(1)), &HE8C7B756), d)))
-c = add(d, rol17(add(add(add(b XOR (d AND (a XOR b)), chunk(2)), &H242070DB), c)))
-b = add(c, rol22(add(add(add(a XOR (c AND (d XOR a)), chunk(3)), &HC1BDCEEE), b)))
-a = add(b, rol7(add(add(add(d XOR (b AND (c XOR d)), chunk(4)), &HF57C0FAF), a)))
-d = add(a, rol12(add(add(add(c XOR (a AND (b XOR c)), chunk(5)), &H4787C62A), d)))
-c = add(d, rol17(add(add(add(b XOR (d AND (a XOR b)), chunk(6)), &HA8304613), c)))
-b = add(c, rol22(add(add(add(a XOR (c AND (d XOR a)), chunk(7)), &HFD469501), b)))
-a = add(b, rol7(add(add(add(d XOR (b AND (c XOR d)), chunk(8)), &H698098D8), a)))
-d = add(a, rol12(add(add(add(c XOR (a AND (b XOR c)), chunk(9)), &H8B44F7AF), d)))
-c = add(d, rol17(add(add(add(b XOR (d AND (a XOR b)), chunk(10)), &HFFFF5BB1), c)))
-b = add(c, rol22(add(add(add(a XOR (c AND (d XOR a)), chunk(11)), &H895CD7BE), b)))
-a = add(b, rol7(add(add(add(d XOR (b AND (c XOR d)), chunk(12)), &H6B901122), a)))
-d = add(a, rol12(add(add(add(c XOR (a AND (b XOR c)), chunk(13)), &HFD987193), d)))
-c = add(d, rol17(add(add(add(b XOR (d AND (a XOR b)), chunk(14)), &HA679438E), c)))
-b = add(c, rol22(add(add(add(a XOR (c AND (d XOR a)), chunk(15)), &H49B40821), b)))
-a = add(b, rol5(add(add(add(c XOR (d AND (b XOR c)), chunk(1)), &HF61E2562), a)))
-d = add(a, rol9(add(add(add(b XOR (c AND (a XOR b)), chunk(6)), &HC040B340), d)))
-c = add(d, rol14(add(add(add(a XOR (b AND (d XOR a)), chunk(11)), &H265E5A51), c)))
-b = add(c, rol20(add(add(add(d XOR (a AND (c XOR d)), chunk(0)), &HE9B6C7AA), b)))
-a = add(b, rol5(add(add(add(c XOR (d AND (b XOR c)), chunk(5)), &HD62F105D), a)))
-d = add(a, rol9(add(add(add(b XOR (c AND (a XOR b)), chunk(10)), &H2441453), d)))
-c = add(d, rol14(add(add(add(a XOR (b AND (d XOR a)), chunk(15)), &HD8A1E681), c)))
-b = add(c, rol20(add(add(add(d XOR (a AND (c XOR d)), chunk(4)), &HE7D3FBC8), b)))
-a = add(b, rol5(add(add(add(c XOR (d AND (b XOR c)), chunk(9)), &H21E1CDE6), a)))
-d = add(a, rol9(add(add(add(b XOR (c AND (a XOR b)), chunk(14)), &HC33707D6), d)))
-c = add(d, rol14(add(add(add(a XOR (b AND (d XOR a)), chunk(3)), &HF4D50D87), c)))
-b = add(c, rol20(add(add(add(d XOR (a AND (c XOR d)), chunk(8)), &H455A14ED), b)))
-a = add(b, rol5(add(add(add(c XOR (d AND (b XOR c)), chunk(13)), &HA9E3E905), a)))
-d = add(a, rol9(add(add(add(b XOR (c AND (a XOR b)), chunk(2)), &HFCEFA3F8), d)))
-c = add(d, rol14(add(add(add(a XOR (b AND (d XOR a)), chunk(7)), &H676F02D9), c)))
-b = add(c, rol20(add(add(add(d XOR (a AND (c XOR d)), chunk(12)), &H8D2A4C8A), b)))
-a = add(b, rol4(add(add(add(b XOR c XOR d, chunk(5)), &HFFFA3942), a)))
-d = add(a, rol11(add(add(add(a XOR b XOR c, chunk(8)), &H8771F681), d)))
-c = add(d, rol16(add(add(add(d XOR a XOR b, chunk(11)), &H6D9D6122), c)))
-b = add(c, rol23(add(add(add(c XOR d XOR a, chunk(14)), &HFDE5380C), b)))
-a = add(b, rol4(add(add(add(b XOR c XOR d, chunk(1)), &HA4BEEA44), a)))
-d = add(a, rol11(add(add(add(a XOR b XOR c, chunk(4)), &H4BDECFA9), d)))
-c = add(d, rol16(add(add(add(d XOR a XOR b, chunk(7)), &HF6BB4B60), c)))
-b = add(c, rol23(add(add(add(c XOR d XOR a, chunk(10)), &HBEBFBC70), b)))
-a = add(b, rol4(add(add(add(b XOR c XOR d, chunk(13)), &H289B7EC6), a)))
-d = add(a, rol11(add(add(add(a XOR b XOR c, chunk(0)), &HEAA127FA), d)))
-c = add(d, rol16(add(add(add(d XOR a XOR b, chunk(3)), &HD4EF3085), c)))
-b = add(c, rol23(add(add(add(c XOR d XOR a, chunk(6)), &H4881D05), b)))
-a = add(b, rol4(add(add(add(b XOR c XOR d, chunk(9)), &HD9D4D039), a)))
-d = add(a, rol11(add(add(add(a XOR b XOR c, chunk(12)), &HE6DB99E5), d)))
-c = add(d, rol16(add(add(add(d XOR a XOR b, chunk(15)), &H1FA27CF8), c)))
-b = add(c, rol23(add(add(add(c XOR d XOR a, chunk(2)), &HC4AC5665), b)))
-a = add(b, rol6(add(add(add(c XOR (b OR NOT d), chunk(0)), &HF4292244), a)))
-d = add(a, rol10(add(add(add(b XOR (a OR NOT c), chunk(7)), &H432AFF97), d)))
-c = add(d, rol15(add(add(add(a XOR (d OR NOT b), chunk(14)), &HAB9423A7), c)))
-b = add(c, rol21(add(add(add(d XOR (c OR NOT a), chunk(5)), &HFC93A039), b)))
-a = add(b, rol6(add(add(add(c XOR (b OR NOT d), chunk(12)), &H655B59C3), a)))
-d = add(a, rol10(add(add(add(b XOR (a OR NOT c), chunk(3)), &H8F0CCC92), d)))
-c = add(d, rol15(add(add(add(a XOR (d OR NOT b), chunk(10)), &HFFEFF47D), c)))
-b = add(c, rol21(add(add(add(d XOR (c OR NOT a), chunk(1)), &H85845DD1), b)))
-a = add(b, rol6(add(add(add(c XOR (b OR NOT d), chunk(8)), &H6FA87E4F), a)))
-d = add(a, rol10(add(add(add(b XOR (a OR NOT c), chunk(15)), &HFE2CE6E0), d)))
-c = add(d, rol15(add(add(add(a XOR (d OR NOT b), chunk(6)), &HA3014314), c)))
-b = add(c, rol21(add(add(add(d XOR (c OR NOT a), chunk(13)), &H4E0811A1), b)))
-a = add(b, rol6(add(add(add(c XOR (b OR NOT d), chunk(4)), &HF7537E82), a)))
-d = add(a, rol10(add(add(add(b XOR (a OR NOT c), chunk(11)), &HBD3AF235), d)))
-c = add(d, rol15(add(add(add(a XOR (d OR NOT b), chunk(2)), &H2AD7D2BB), c)))
-b = add(c, rol21(add(add(add(d XOR (c OR NOT a), chunk(9)), &HEB86D391), b)))
-hashchunk$ = MKL$(a) + MKL$(b) + MKL$(c) + MKL$(d)
+FUNCTION hashchunk$ (origstate&(), chunk&())
+' Hash one chunk. state&(): 4 items, chunk&(): 16 items. Return 16 bytes.
+
+DIM state&(3)
+
+' only change copy of argument
+FOR i% = 0 TO 3: state&(i%) = origstate&(i%): NEXT
+
+' run 64 rounds
+FOR r% = 0 TO 63
+    IF r% < 16 THEN
+        temp& = ((state&(2) XOR state&(3)) AND state&(1)) XOR state&(3)
+    ELSEIF r% < 32 THEN
+        temp& = ((state&(1) XOR state&(2)) AND state&(3)) XOR state&(2)
+    ELSEIF r% < 48 THEN
+        temp& = state&(1) XOR state&(2) XOR state&(3)
+    ELSE
+        temp& = (state&(1) OR NOT state&(3)) XOR state&(2)
+    END IF
+
+    temp& = add(temp&, state&(0))
+    temp& = add(temp&, sines&(r%))
+    temp& = add(temp&, chunk&(chunkindexes%(r%)))
+    temp& = rol(temp&, rotcounts%(r%))
+    temp& = add(temp&, state&(1))
+      
+    state&(0) = state&(3)
+    state&(3) = state&(2)
+    state&(2) = state&(1)
+    state&(1) = temp&
+NEXT
+
+FOR i% = 0 TO 3: hash$ = hash$ + MKL$(state&(i%)): NEXT
+hashchunk$ = hash$
+
 END FUNCTION
 
-FUNCTION md5$ (msg AS STRING)
+FUNCTION md5$ (msg$)
 ' Compute MD5. Return 128 bits as 16 bytes.
-DIM i AS INTEGER, s0 AS LONG, s1 AS LONG, s2 AS LONG, s3 AS LONG
-DIM chunkpos AS INTEGER, chunk(15) AS LONG, chunkhash AS STRING
+
+DIM state&(3)   ' state of MD5 algorithm
+DIM chunk&(15)  ' one chunk of padded message
+
 IF LEN(msg) > 8192 THEN PRINT "Message too long.": END
-msg = prepmsg(msg)
-RESTORE: READ s0, s1, s2, s3
-FOR chunkpos = 1 TO LEN(msg) STEP 64
-    FOR i = 0 TO 15: chunk(i) = CVL(MID$(msg, chunkpos + i * 4, 4)): NEXT
-    chunkhash = hashchunk(s0, s1, s2, s3, chunk())
-    s0 = add(s0, CVL(LEFT$(chunkhash, 4)))
-    s1 = add(s1, CVL(MID$(chunkhash, 5, 4)))
-    s2 = add(s2, CVL(MID$(chunkhash, 9, 4)))
-    s3 = add(s3, CVL(RIGHT$(chunkhash, 4)))
+
+' prepare message
+msg$ = prepmsg(msg$)
+
+' set initial state
+state&(0) = &H67452301
+state&(1) = &HEFCDAB89
+state&(2) = &H98BADCFE
+state&(3) = &H10325476
+
+' for each 64-byte chunk...
+FOR chunkpos% = 1 TO LEN(msg$) STEP 64
+    ' split into 16 * 32-bit ints
+    FOR i% = 0 TO 15
+        chunk&(i%) = CVL(MID$(msg$, chunkpos% + i% * 4, 4))
+    NEXT
+    ' hash it
+    chunkh$ = hashchunk(state&(), chunk&())
+    ' add to state
+    FOR i% = 0 TO 3
+        state&(i%) = add(state&(i%), CVL(MID$(chunkh$, i% * 4 + 1, 4)))
+    NEXT
 NEXT
-md5$ = MKL$(s0) + MKL$(s1) + MKL$(s2) + MKL$(s3)
+
+' hash = final state
+FOR i% = 0 TO 3: hash$ = hash$ + MKL$(state&(i%)): NEXT
+md5$ = hash$
+
 END FUNCTION
 
-FUNCTION prepmsg$ (msg AS STRING)
+FUNCTION prepmsg$ (msg$)
 ' Prepare message for hashing.
-DIM leng AS INTEGER, pad AS INTEGER
-leng = LEN(msg)
-pad = (55 + 64 - leng MOD 64) MOD 64  ' pad to 64n bytes
-prepmsg = msg + CHR$(&H80) + STRING$(pad, &H0) + MKL$(leng * 8&) + MKL$(0)
+
+leng% = LEN(msg$)
+pad% = (55 + 64 - (leng% MOD 64)) MOD 64  ' pad to 64n bytes
+prepmsg = msg$ + CHR$(&H80) + STRING$(pad%, &H0) + MKL$(leng% * 8&) + MKL$(0)
+
 END FUNCTION
 
-FUNCTION rol10& (n AS LONG)
-DIM a AS LONG, b AS LONG, c AS LONG
-a = (n AND &HFFC00000) \ &H400000 AND &H3FF
-b = -(n AND &H200000) AND &H80000000
-c = (n AND &H1FFFFF) * &H400
-rol10 = a OR b OR c
+FUNCTION rol& (n&, r%)
+' rotate n& left by r% bits
+
+' example: r% = 4:
+'   bits: aaaa bccc cccc cccc cccc cccc cccc cccc
+'   ->    bccc cccc cccc cccc cccc cccc cccc aaaa
+'
+'   a& =  (n& AND &HF0000000) \ &H10000000 AND &HF
+'   b& = -(n& AND &H08000000)              AND &H80000000
+'   c& =  (n& AND &H07FFFFFF) * &H10
+'   rol& = a& OR b& OR c&
+
+' shift r% MSBs to LSBs
+a& = (n& AND NOT pow2m1&(32 - r%)) \ pow2&(32 - r%) AND pow2m1&(r%)
+
+' shift correct bit to MSB
+b& = -(n& AND pow2&(31 - r%)) AND &H80000000
+
+' shift the rest left
+c& = (n& AND pow2m1&(31 - r%)) * pow2&(r%)
+
+' combine
+rol& = a& OR b& OR c&
+
 END FUNCTION
 
-FUNCTION rol11& (n AS LONG)
-DIM a AS LONG, b AS LONG, c AS LONG
-a = (n AND &HFFE00000) \ &H200000 AND &H7FF
-b = -(n AND &H100000) AND &H80000000
-c = (n AND &HFFFFF) * &H800
-rol11 = a OR b OR c
-END FUNCTION
+FUNCTION sine& (r%)
+' get sine constant for round n% (0-63)
 
-FUNCTION rol12& (n AS LONG)
-DIM a AS LONG, b AS LONG, c AS LONG
-a = (n AND &HFFF00000) \ &H100000 AND &HFFF
-b = -(n AND &H80000) AND &H80000000
-c = (n AND &H7FFFF) * &H1000
-rol12 = a OR b OR c
-END FUNCTION
+temp# = ABS(SIN(r% + 1)) * &H10000
+hi& = INT(temp#)
+lo& = INT((temp# - hi&) * &H10000)
+sine& = rol(hi&, 16) OR lo&
 
-FUNCTION rol14& (n AS LONG)
-DIM a AS LONG, b AS LONG, c AS LONG
-a = (n AND &HFFFC0000) \ &H40000 AND &H3FFF
-b = -(n AND &H20000) AND &H80000000
-c = (n AND &H1FFFF) * &H4000
-rol14 = a OR b OR c
-END FUNCTION
-
-FUNCTION rol15& (n AS LONG)
-DIM a AS LONG, b AS LONG, c AS LONG
-a = (n AND &HFFFE0000) \ &H20000 AND &H7FFF&
-b = -(n AND &H10000) AND &H80000000
-c = (n AND &HFFFF&) * &H8000&
-rol15 = a OR b OR c
-END FUNCTION
-
-FUNCTION rol16& (n AS LONG)
-DIM a AS LONG, b AS LONG, c AS LONG
-a = (n AND &HFFFF0000) \ &H10000 AND &HFFFF&
-b = -(n AND &H8000&) AND &H80000000
-c = (n AND &H7FFF&) * &H10000
-rol16 = a OR b OR c
-END FUNCTION
-
-FUNCTION rol17& (n AS LONG)
-DIM a AS LONG, b AS LONG, c AS LONG
-a = (n AND &HFFFF8000) \ &H8000& AND &H1FFFF
-b = -(n AND &H4000) AND &H80000000
-c = (n AND &H3FFF) * &H20000
-rol17 = a OR b OR c
-END FUNCTION
-
-FUNCTION rol20& (n AS LONG)
-DIM a AS LONG, b AS LONG, c AS LONG
-a = (n AND &HFFFFF000) \ &H1000 AND &HFFFFF
-b = -(n AND &H800) AND &H80000000
-c = (n AND &H7FF) * &H100000
-rol20 = a OR b OR c
-END FUNCTION
-
-FUNCTION rol21& (n AS LONG)
-DIM a AS LONG, b AS LONG, c AS LONG
-a = (n AND &HFFFFF800) \ &H800 AND &H1FFFFF
-b = -(n AND &H400) AND &H80000000
-c = (n AND &H3FF) * &H200000
-rol21 = a OR b OR c
-END FUNCTION
-
-FUNCTION rol22& (n AS LONG)
-DIM a AS LONG, b AS LONG, c AS LONG
-a = (n AND &HFFFFFC00) \ &H400 AND &H3FFFFF
-b = -(n AND &H200) AND &H80000000
-c = (n AND &H1FF) * &H400000
-rol22 = a OR b OR c
-END FUNCTION
-
-FUNCTION rol23& (n AS LONG)
-DIM a AS LONG, b AS LONG, c AS LONG
-a = (n AND &HFFFFFE00) \ &H200 AND &H7FFFFF
-b = -(n AND &H100) AND &H80000000
-c = (n AND &HFF) * &H800000
-rol23 = a OR b OR c
-END FUNCTION
-
-FUNCTION rol4& (n AS LONG)
-DIM a AS LONG, b AS LONG, c AS LONG
-a = (n AND &HF0000000) \ &H10000000 AND &HF
-b = -(n AND &H8000000) AND &H80000000
-c = (n AND &H7FFFFFF) * &H10
-rol4 = a OR b OR c
-END FUNCTION
-
-FUNCTION rol5& (n AS LONG)
-DIM a AS LONG, b AS LONG, c AS LONG
-a = (n AND &HF8000000) \ &H8000000 AND &H1F
-b = -(n AND &H4000000) AND &H80000000
-c = (n AND &H3FFFFFF) * &H20
-rol5 = a OR b OR c
-END FUNCTION
-
-FUNCTION rol6& (n AS LONG)
-DIM a AS LONG, b AS LONG, c AS LONG
-a = (n AND &HFC000000) \ &H4000000 AND &H3F
-b = -(n AND &H2000000) AND &H80000000
-c = (n AND &H1FFFFFF) * &H40
-rol6 = a OR b OR c
-END FUNCTION
-
-FUNCTION rol7& (n AS LONG)
-DIM a AS LONG, b AS LONG, c AS LONG
-a = (n AND &HFE000000) \ &H2000000 AND &H7F
-b = -(n AND &H1000000) AND &H80000000
-c = (n AND &HFFFFFF) * &H80
-rol7 = a OR b OR c
-END FUNCTION
-
-FUNCTION rol9& (n AS LONG)
-DIM a AS LONG, b AS LONG, c AS LONG
-a = (n AND &HFF800000) \ &H800000 AND &H1FF
-b = -(n AND &H400000) AND &H80000000
-c = (n AND &H3FFFFF) * &H200
-rol9 = a OR b OR c
 END FUNCTION
 
 SUB test
@@ -287,13 +220,15 @@ PRINT "The md5() function works correctly."
 END SUB
 
 SUB testspeed
-DIM starttime AS SINGLE, hash AS STRING, score AS LONG
-IF TIMER > 86400 - 15 THEN PRINT "Wait 15 s and try again.": EXIT SUB
+
 PRINT "Speed test running."
-starttime = TIMER
+starttime! = TIMER
+
 DO
-    hash = md5("password")
-    score = score + 1
-LOOP WHILE TIMER - starttime < 10
-PRINT "Hashes computed in 10 seconds:"; score
+    hash$ = md5("password")
+    score& = score& + 1
+LOOP WHILE TIMER - starttime! < 10
+
+PRINT "Hashes computed in 10 seconds:"; score&
 END SUB
+
